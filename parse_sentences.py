@@ -3,6 +3,8 @@
 import re
 from unidecode import *
 import sys
+import gzip
+
 import pdb
 
 abbreviations = {
@@ -50,20 +52,77 @@ for a in aa :
 
 # load typos
 typos = {}
-with open ("typos.txt", "r") as f :
-  for line in f :
-    line = line.split()
-    typos[line[0][1:]] = line[0][0]
+try :
+  with open ("typos.txt", "r") as f :
+    for line in f :
+      line = line.split()
+      typos[line[0][1:]] = [line[0][0]]
+      if len(line) > 2 and line[1] == ":" :
+        typos[line[0][1:]].append (line[2].strip('"'))
+      else :
+        typos[line[0][1:]].extend (line[1:])
+except FileNotFoundError :
+  print ("No file typos.txt; occurrences of known typos will not be printed")
+  pass
 
-def parse (text) :
+# load frequencies of words from a previous run
+word_count = {}
+try:
+  with open ("word_counts.txt", "r") as f :
+    for line in f :
+      line = line.split()
+      word_count[line[0]] = sum([int(w) for w in line[1:]])
+except FileNotFoundError :
+  print ("No file word_ranks.txt; hyphenation errors will not be detected")
+
+# load words identified as pairs of words with no separating space
+joined_words = {}
+try:
+  with open ("words_joined.txt", "r") as f :
+    for line in f :
+      line = line.split()
+      joined_words[line[0]] = {"-": 0, " ": 0, "_": line[1]}
+except FileNotFoundError :
+  print ("No file words_joined.txt; run-together words will not be counted")
+
+not_hyphenated = {
+  "orang": ("utan",),
+  "soy": ("bean",),
+  "a": ("lone",),
+  "ultra": ("violet", "sonic", "sound"),
+  "gastro": ("intestinal",),
+  "cerebro": ("spinal",),
+  "poke": ("weed",),
+  "echo": ("cardiography",),
+  "tread": ("mill",),
+  "hong": ("kong",),
+  "oncorna": ("virus",),
+  "acetyl": ("acetonate", "chloramphenicols", "homotaurinate", "salycilic"),
+  "antipentylene": ("tetrazol",),
+  "antiphosphatidyl": ("inositol", "serine"),
+  "antiphosphoryl": ("choline",),
+  "antipicorna": ("virus",),
+  "cyclohexane": ("triones",),
+  "diastereo": ("isomers", "selectivity"),
+}
+
+def is_english (text: str) :
+  """
+    Return true if text is a list of English sentences.
+    Currently detected by "is English if it contains the word 'the'".
+  """
+  return text.find(" the ") != -1
+
+def parse (text, en_only = True) :
   """
   Parse text into words.
   Keep "." characters within words, like decimals and acronyms.
   Flag starts of sentences, so that we can tell if a capital is
   part of the work or just to mark the start of a sentence.
   """
-  sentences = text.replace("--", "—").split(".")        # unicode em-dash
-  words = [re.findall("[-\\w']+|[\\W]", s) for s in sentences]
+  if en_only and not is_english(words) :
+    return []
+    
   joined = []
   first_word = True
   for i, s in enumerate (words) :
@@ -77,9 +136,19 @@ def parse (text) :
     #    else :
     #      new_s.append(w)
     #  s = new_s
+  sentences = byte_escapes(text)                            # \x## to byte
+  sentences = sentences.replace("--", "—").split(".")        # unicode em-dash
+  words = [re.findall("[-\\w']+|[\\W]", s) for s in sentences]
 
     if not(s) :
       continue
+
+    # TODO: merge words with brackets in the middle, like
+    # N-[8-R-dibenzo(b,f)oxepin-10-yl]-N'-methyl-piperazine-maleates
+    # (Check "close bracket then text" and "text then open bracket",
+    # with no spaces between the brackets.)
+
+    # TODO: Separate quotes from single-quoted phrases 
 
     # Append to sentence list, or join this sentence to the previous
     join = False
@@ -141,58 +210,168 @@ def parse (text) :
 
   return [[w for w in s if w != " "] for s in joined]
 
+def byte_escapes (text) :
+  """
+  Expand any escaped 8-bit values encoded by \\x<d><d>.
+  """
+  s = bytes(text, encoding="utf-8").split(b'\\')
+  if len (s) == 1 :
+    return text
+
+  parts = [s[0]]
+  for p in s[1:] :
+    if len(p) >= 3 and p.startswith (b'x') :     # 8-bit escapes
+      try :
+        parts.append(bytes([int(p[1:3], base=16)]))
+      except ValueError :
+        print ("Invalid Unicode escape in", p)
+        parts.append(p[0:3])
+      parts.append(p[3:])
+    elif len(p) >= 2 and p[0] in b"'":           # other escapes
+      parts.append(p)
+    else :
+      parts.append(b'\\')                        # unrecognised; perhaps literal
+      parts.append(p)
+
+  if any([p.find(b"xbc") != -1 for p in parts]) :
+    print (parts)
+    pdb.set_trace ()
+  return str(b"".join (parts), encoding="utf-8")
+
 lexicon = {}
 count_by_journal = {}
+hyphen_prefix = {}      # possible hyphenated words, part before hyphen
+hyphen_suffix = {}      # possible hyphenated words, part after  hyphen
 
-with open ("abstracts.txt", "r") as f :
-  for line in f :
-    parts = line.strip().split('"')
-    if len (parts) < 3 :
-      print ("Error", parts, file=sys.stderr)
-      continue
-    ID = parts[0] + '"' + parts[1] + '"'
-    line = '"'.join(parts[2:])
+def count_count (dictionary, key1, key2, init = None) :
+  if not key1 in dictionary :
+    dictionary[key1] = init if init != None else {}
 
-    journal = " ".join(parts[0].split()[1:-1])
-    if journal not in count_by_journal :
-      # counts of: articles, articles with errors, sentences with errors
-      count_by_journal[journal] = {"a": 0, "e": 0, "s": 0}
-    count_by_journal[journal]["a"] += 1
+  if not key2 in dictionary[key1] :
+    dictionary[key1][key2] = 0
 
-    sentences = parse (line)
+  dictionary[key1][key2] += 1
 
-    if any ([any ([w in typos for w in s]) for s in sentences]) :
+filename = sys.argv[1] if len(sys.argv) > 1 else "abstracts.txt.gz"
+
+try :
+  with (gzip.open (filename, "r") if filename.endswith(".gz") else open (filename, "rb")) as f :
+    for line in f :
+      parts = line.strip().decode("utf-8").split('"')
+      if len (parts) < 3 :
+        print ("Error", parts, file=sys.stderr)
+        continue
+      ID = parts[0] + '"' + parts[1].replace("”", '"') + '"'
+      line = '"'.join(parts[2:])
+
+      journal = " ".join(parts[0].split()[1:-1])
+      if journal not in count_by_journal :
+        # counts of: articles, articles with errors, sentences with errors
+        count_by_journal[journal] = {"a": 0, "e": 0, "s": 0}
+      count_by_journal[journal]["a"] += 1
+
+      sentences = parse (line)
+
+      # check for occurrence of previously-found typos
+      if typos :
+        if any ([any ([w in typos for w in s]) for s in sentences]) :
+          for s in sentences :
+            w = [w for w in s if w in typos]
+            if w :
+              for ww in w :
+                print ("TYPO", ''.join(['"',ww,'": "',
+                                       (typos[ww][1] if len(typos[ww])>1 else ""),
+                                       '"']),
+                       ID, (" ".join(s)).replace(ww, "*"+ww.upper()+"*"),
+                       file=sys.stderr)
+                count_by_journal[journal]["s"] += 1
+
+          count_by_journal[journal]["e"] += 1
+
+          continue
+
+      # check for broken words (hyphenation, then hyphen deleted)
+      if word_count :
+        for s in sentences :
+          joined = [s[i]+s[i+1] for i in range(len(s)-1)]
+          for i in range(len(s)-1) :
+            #if s[i] == "ure" : pdb.set_trace ()
+            if joined[i] in word_count and s[i] and s[i+1] :
+              try :
+                parts = min ( 2 * max([word_count[s[i]], word_count[s[i+1]]]),
+                             300 * min([word_count[s[i]], word_count[s[i+1]]]))
+              except KeyError :
+                parts = 0
+
+              if ( parts < word_count[joined[i]]
+                   and (s[i].lower() not in not_hyphenated
+                        or s[i+1].lower() not in not_hyphenated[s[i]]) ) :
+                count_count(hyphen_prefix, s[i], joined[i])
+                count_count(hyphen_suffix, s[i+1], joined[i])
+                pair = s[i] + " " + s[i+1]
+                print ("HYPHEN", ''.join(['"',pair,'": "',joined[i],'"']),
+                       ID, (" ".join(s)).replace(pair, "*"+pair.upper()+"*"),
+                       file=sys.stderr)
+
+              if joined[i] in joined_words :
+                count_count(joined_words, joined[i], " ")
+      
+      # count words
       for s in sentences :
-        w = [w for w in s if w in typos]
-        if w :
-          print ("TYPO", w, ID, " ".join(s), file=sys.stderr)
-          count_by_journal[journal]["s"] += 1
+        first_word = True
+        for i, w in enumerate(s) :
+          if len(w) > 1 or re.match(r"[-\w']+", w) :
+            if w not in lexicon :
+              lexicon[w] = {"f": 0, "o": 0}
+              #print(w, file=sys.stderr)
 
-      count_by_journal[journal]["e"] += 1
+            #if w == "The" and not first_word :
+            #  print (s)
+            #  pdb.set_trace ()
 
-      continue
-    
-    for s in sentences :
-      first_word = True
-      for i, w in enumerate(s) :
-        if len(w) > 1 or re.match(r"[-\w']+", w) :
-          if w not in lexicon :
-            lexicon[w] = {"f": 0, "o": 0}
-            #print(w, file=sys.stderr)
+            lexicon[w]["f" if first_word else "o"] += 1
+            first_word = False
+except Exception as e :
+  try :
+    print (e)
+  except :
+    pass
 
-          #if w == "The" and not first_word :
-          #  print (s)
-          #  pdb.set_trace ()
+# Count hyphenated occurrences of words that seem to be formed of two words
+if joined_words :
+  for w in lexicon :
+    if '-' in w :
+      ww = w.split("-")
+      if len(ww) == 2 :
+        wj = "".join(ww)
+        if wj in joined_words :
+          count_count(joined_words, wj, "-")
 
-          lexicon[w]["f" if first_word else "o"] += 1
-          first_word = False
+print ("---")
+for w in joined_words :
+  if w in lexicon :
+    j = joined_words[w]
+    cases = lexicon[w]["f"] + lexicon[w]["o"]
+    print (j["_"], cases/max(j["-"] + j[" "], 1e-6), cases, j["-"], j[" "])
 
-  print ("---")
-  for j in sorted (count_by_journal, key = lambda w: -count_by_journal[w]["e"]/count_by_journal[w]["a"]) :
-    c = count_by_journal[j]
-    if c["e"] :
-      print ("%4d %4d %4d" % (c["s"], c["e"], c["a"]), j)
+print ("---")
+for j in sorted (count_by_journal, key = lambda w: -count_by_journal[w]["e"]/count_by_journal[w]["a"]) :
+  c = count_by_journal[j]
+  if c["e"] :
+    print ("%4d %4d %4d" % (c["s"], c["e"], c["a"]), j)
 
-  print ("---")
-  for w in sorted(lexicon, key = lambda w: (-lexicon[w]["f"]-lexicon[w]["o"], w)) :
-    print (w, lexicon[w]["o"], lexicon[w]["f"])
+print ("---")
+prefix_count = {w:sum([hyphen_prefix[w][i] for i in hyphen_prefix[w]]) for w in hyphen_prefix}
+for j in sorted (hyphen_prefix, key = lambda w : -prefix_count[w]) :
+  print (j+'-', hyphen_prefix[j])
+
+suffix_count = {w:sum([hyphen_suffix[w][i] for i in hyphen_suffix[w]]) for w in hyphen_suffix}
+for j in sorted (hyphen_suffix, key = lambda w : -suffix_count[w]) :
+  print ('-'+j, hyphen_suffix[j])
+
+print ("---")
+for w in sorted(lexicon, key = lambda w: (-lexicon[w]["f"]-lexicon[w]["o"], w)) :
+  print (w, lexicon[w]["o"], lexicon[w]["f"],
+         prefix_count[w] if w in prefix_count else 0,
+         suffix_count[w] if w in suffix_count else 0,
+        )
