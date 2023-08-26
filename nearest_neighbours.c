@@ -2,10 +2,22 @@
 #include <stdlib.h>
 #include <bsd/string.h>
 #include <stdbool.h>
+#include <ctype.h>
+#include <inttypes.h>
+
+// Classify error as
+// (a) OCR-like
+// (b) typing
+// (c) spelling
+// (d) other
+typedef enum {
+   ocr_err, typing_err, spelling_err, other_err
+} err_cause;
 
 #define context 4
 typedef struct diff {
     char type; // *,/ (un)double, X transpose, +,- add/drop, R replace
+    uint8_t cause;
     char change[2];
     char context_after[context];
     char context_before[context];
@@ -25,6 +37,109 @@ is_lower(const char *str)
         str++;
     return *str == '\0';
 }
+
+// Return true if a space-terminated string is all alphabetic ASCII
+bool
+is_alpha(const char *str)
+{
+    while ((*str >= 'a' && *str <= 'z') || (*str >= 'A' && *str <= 'Z'))
+        str++;
+    return *str == '\0';
+}
+
+// Classify error as
+// (a) OCR-like
+// (b) typing
+// (c) spelling
+// (d) other
+err_cause
+err_type (diff *a)
+{
+    static const char *ocr[] = {"il", "litI", "tlI", "oc", "coe", "ec", "yv", "vy", "hnb", "nhru", "rn", "un", "gq", "qg", "CO", "DO", "OCDQ", "QO", "IlE", "EI", "HM", "MH", "PT", "TP"};
+    static const char *keyboard [] = {"qwertyuiop", "asdfghjkl", "zxcvbnm"};
+    static const char *confusion[]= {"cksqz", "kc", "nm", "mn", "qc", "st", "tds", "zc", "aeio", "eai", "ia", "oa"};
+    //static const char **affixes[]= {{"able", "ible"}};
+
+    if (a->type == 'X') // transpose
+        return typing_err;
+
+    if (a->type == '#') // wrong double
+        return spelling_err;
+
+    for (int i = 0; i < sizeof(ocr)/sizeof(ocr[0]); i++) {
+        if (a->change[0] == ocr[i][0] && strchr(ocr[i]+1, a->change[1]))
+            return ocr_err;
+    }
+
+    int r0 = -2, c0 = -2, r1 = -2, c1 = -2, r2 = -2, c2 = -2;;
+    int ch0 = tolower(a->change[0]);
+    int ch1, ch2;
+    if (a->change[1]) {
+        ch1 = tolower(a->change[1]);
+        ch2 = 0;
+    } else {
+        ch1 = tolower(a->context_before[0]);
+        ch2 = tolower(a->context_after [0]);
+    }
+    for (int i = 0; i < sizeof(keyboard)/sizeof(keyboard[0]); i++) {
+        char *b = strchr(keyboard[i], ch0);
+        if (b != NULL) {
+            r0 = i;
+            c0 = b - keyboard[i];
+            if (r1 >= 0 && (r2 >= 0 || !ch2))
+                break;
+        }
+        b = strchr(keyboard[i], ch1);
+        if (b != NULL) {
+            r1 = i;
+            c1 = b - keyboard[i];
+            if (r0 >= 0 && (r2 >= 0 || !ch2))
+                break;
+        }
+        if (ch2) {
+            b = strchr(keyboard[i], ch2);
+            if (b != NULL) {
+                r2 = i;
+                c2 = b - keyboard[i];
+            }
+            if (r0 >= 0 && r1 >= 0 && r2 >= 0)
+                break;
+        }
+    }
+    if ((abs(r0-r1) <= 1 && abs (c0-c1) <= 1) ||        // fat finger
+        (abs(r0-r2) <= 1 && abs (c0-c2) <= 1))
+        return typing_err;
+
+    if (a->type == '-') {       // dropped letter
+        int vowel_dropped = (strchr("aeiou", ch0) != NULL);
+        int vowel_before  = ch1 ? (strchr("aeiou", ch1) != NULL) : -1;
+        int vowel_after   = ch2 ? (strchr("aeiou", ch2) != NULL) : -1;
+        if (vowel_before == vowel_after && vowel_dropped != vowel_before)
+            return typing_err;
+        else
+            return spelling_err;
+    }
+
+    if (a->type == '*') {       // double
+        if (!a->context_before[0]                       // doubled first letter
+            || a->context_before[0] == a->context_before[1]     // tripple
+            || strchr ("qwyuihjkxv", a->change[0]))     // uncommon double
+            return typing_err;
+        return spelling_err;
+    }
+
+    if (a->type == '/') {
+        return spelling_err;
+    }
+
+    for (int i = 0; i < sizeof(confusion)/sizeof(confusion[0]); i++) {
+        if (a->change[0] == confusion[i][0] && strchr(confusion[i]+1, a->change[1]))
+            return spelling_err;
+    }
+
+    return other_err;
+}
+
 
 // Find the difference between two strings a, b that differ in one of six ways:
 // * A letter in a can be doubled in b
@@ -93,6 +208,8 @@ find_diff (char *a, char *b, diff *d)
     }
     if (i == 0)
         *dcb = '\0';
+
+    d->cause = (uint8_t)err_type(d);
 
     /*
     fprintf (stderr, "change_%s_%s_%c_%c%c_",
@@ -164,8 +281,8 @@ main (int argc, char *argv[])
 {
     //long int word_count = 726578;
     //long int char_count = 15514305;
-    long int word_count = 500000;
-    long int char_count = 22000000;
+    long int word_count = 600000;
+    long int char_count = 25000000;
     const int buf_len = 200;
     char *data = (char*)malloc(char_count + 2*word_count + buf_len); // string+type+\0
     diff *diffs = (diff*)malloc(word_count * sizeof(diff));
@@ -188,7 +305,7 @@ main (int argc, char *argv[])
     for (i = 0; i < word_count; i++)
         neighbours[i] = ngbr_data + i*ngbr_count;
 
-    if ((fp = fopen ("words_classified_1-1166.txt", "r")) == NULL) {
+    if ((fp = fopen ("words_classified_caps_1-1166.txt", "r")) == NULL) {
         fprintf (stderr, "Could not open file for reading\n");
         exit(1);
     }
@@ -199,6 +316,7 @@ main (int argc, char *argv[])
     int max_iter = 800000;
     for (i = 0; i < word_count; ) {
         if (!fgets(curr, buf_len, fp)) {
+            fprintf(stderr,"Read failed on line %d counting from 0 %d.\n", i, feof(fp));
             word_count = i;
             break;
         }
@@ -211,7 +329,8 @@ main (int argc, char *argv[])
         *end1 = *end2 = '\0';
         //fprintf (stderr, "end1 %ld %s end2 %ld %s\n",
         //         end1 - curr, curr, end2 - curr, end1+1);
-        if (is_lower(curr+1)) {
+        //if (curr[0] != '=' && is_lower(curr+1)) {
+        if (curr[0] != '=' && is_alpha(curr+1)) {
             words[i] = curr+1;
             curr = end1+1;
             find_diff (words[i], end1+1, diffs+i);
@@ -227,6 +346,8 @@ main (int argc, char *argv[])
     // Find ngbr_count nearest neighbours to each word
     for (i = 0; i < word_count-1; i++) {
         int j;
+        if (i % 10000 == 0)
+          printf ("%d\n", i/10000);
         
         for (j = i+1; j < word_count; j++) {
             int d = diff_closeness(diffs+i, diffs+j);
@@ -276,28 +397,27 @@ main (int argc, char *argv[])
             }
         }
     }
-    //fprintf (stderr, " %ld, %d\n", word_count, max_iter);
-    
+
+    fprintf (stderr, "\n %ld, %d\n", word_count, max_iter);
 
     for (i = 0; i < word_count; i++) {
         int j;
-        int type_count [7] = {0,0,0,0,0,0,0};
+        static const char types[] = "?-*_+!=:;#%";
+        int type_count [11 /*(strlen(types)*/] = {0};
+
         printf ("%s %d", words[i]-1, i);
         for (j = 0; j < ngbr_count; j++) {
-            if (neighbours[i][j].closeness)
-                switch (words[neighbours[i][j].index][-1]) {
-                    case '?': type_count[0]++; break;
-                    case '-': type_count[1]++; break;
-                    case '*': type_count[2]++; break;
-                    case '_': type_count[3]++; break;
-                    case '+': type_count[4]++; break;
-                    case '!': type_count[5]++; break;
-                    case '=': type_count[6]++; break;
-                }
+            if (neighbours[i][j].closeness) {
+                char *type = strchr (types, words[neighbours[i][j].index][-1]);
+                if (type)
+                    type_count [type - types]++;
+            }
             printf (" %c%ld_%d", neighbours[i][j].type, neighbours[i][j].index, neighbours[i][j].closeness);
         }
         for (j = 0; j < sizeof(type_count)/sizeof(*type_count); j++)
-          printf (" %d", type_count[j]);
-        printf (" %c\n", diffs[i].type);
+            printf (" %d", type_count[j]);
+        printf (" %c%c%c %c\n", diffs[i].type, diffs[i].change[0],
+                      (diffs[i].change[1] ? diffs[i].change[1] : '@'),
+                      "OTS?"[diffs[i].cause]);
     }
 }

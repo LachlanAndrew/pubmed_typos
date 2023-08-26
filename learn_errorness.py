@@ -7,7 +7,7 @@ import re
 
 import pdb
 
-file_suffix = "_1-1166"
+file_suffix = "_caps_1-1166"
 
 features1 = {}
 alternative = {}
@@ -15,6 +15,8 @@ word_counts = {}
 with open ("words_classified%s.txt" % file_suffix, "r") as f :
   for line in f :
     line = line.split()
+    if not line :
+     continue
     word = line[0][1:]
     trust = line[0][0]
     ratio       = float(line[2])
@@ -28,27 +30,35 @@ with open ("words_classified%s.txt" % file_suffix, "r") as f :
 
 features = {}
 answers = {}
+cause_list = "OTS?"     # OCR, typing, spelling, unknown
 err_type_list = "X#*/+-S"
 err_types = {}
 with open ("words_neighbours%s.txt" % file_suffix, "r") as f :
   for line in f :
     line = line.split()
     word = line[0][1:]
-    err_types[word] = line[-1]
+    try :
+      err_types[word] = line[-2][1]
+    except :
+      breakpoint ()
 
     trust = line[0][0]
-    uncertain  = float(line[-8])
-    known_err  = float(line[-7])
-    guess_err  = float(line[-6])
-    underline  = float(line[-5])
-    guess_true = float(line[-4])
-    known_true = float(line[-3])
-    only_opt   = float(line[-2])
+    uncertain  = float(line[-12])
+    known_err  = float(line[-11])
+    guess_err  = float(line[-10])
+    underline  = float(line[-9])
+    guess_true = float(line[-8])
+    known_true = float(line[-7])
+    only_opt   = float(line[-6])
+    under_lcYes= float(line[-5])
+    under_lcNo = float(line[-4])
+    err_lc_err = float(line[-3])
+    cause      = cause_list.find(line[-1])
     err_type = err_type_list.find(err_types[word])
 
     ratio, fixed_count, word_count = features1[word]
 
-    inp = (np.log(max(ratio,1e-6)), np.log(max(fixed_count,1)), np.log(max(word_count,1)), uncertain, known_err, guess_err, underline, guess_true, known_true, only_opt, err_type)
+    inp = (np.log(max(ratio,1e-6)), np.log(max(fixed_count,1)), np.log(max(word_count,1)), uncertain, known_err, guess_err, underline, guess_true, known_true, only_opt, under_lcYes, under_lcNo, err_lc_err, cause, err_type)
     features[word] = inp
     answers[word] = trust
 
@@ -73,216 +83,6 @@ predictions = model.predict(np.array([features[w] for w in features]))
 
 word_score = [(w, 1-predictions[i][0]) for i, w in enumerate(features)]
 
-"""
-# Group space-separated words by their components to help a human
-# distinguish typos from compound words (or compound words with typos).
-for pattern in (# likely to be errors
-                "after",
-                "against",
-                "air",
-                "also",
-                "and",
-                "as",
-                "assay",
-                "at",
-                "by",
-                "each",
-                "either",
-                "end",
-                "every",
-                "except",
-                "for",
-                "formation",
-                "from",
-                "half",
-                "has",
-                "here",
-                "of",
-                "off",
-                "only",
-                "order",
-                "other",
-                "result"
-                "showed",
-                "study",
-                "test",
-                "than",
-                "that",
-                "the",
-                "then",
-                "there",
-                "these",
-                "this",
-                "those",
-                "to",
-                "together",
-                "use"
-                "used"
-                "was",
-                "were",
-                "with",
-
-                # Legitimate prefix/suffix
-                "form",
-                "forming",
-                "like",
-                "wide",
-                "pre",
-                "post",
-                "therapy",
-                "infra",
-                "hyper",
-                "hypo",
-                "ante",
-                "anti",
-                "non",
-                "un",
-                "de",
-                "re",
-                "co",
-                "under",
-                "over",
-                "ward",
-                "endo",
-                "auto",
-                "equi",
-                "meta",
-                "virus",
-
-                "uni",
-                "mono",
-                "bi",
-                "bis",
-                "di",
-                "tri",
-                "tetra",
-                "penta",
-                "hexa",
-
-                "sub",
-                "super",
-                "supra",
-                "extra",
-                "intra",
-                "inter",
-                "trans",
-                "retro",
-                "iso",
-                "para",
-                "gram",
-                "graph.*",
-                "nano",
-                "pico",
-                "micro",
-                "macro",
-                "mega",
-                "mid",
-                "semi",
-                "multi",
-                "poly"
-                "oligo",
-                "ultra",
-                "pseudo",
-                "quasi",
-                "exo",
-                "endo",
-                "peri",
-                "dis",
-                "homo",
-                "hetero",
-                "mal",
-
-                "electro",
-                "magneto",
-                "radio",
-                "video",
-                "photo",
-
-                "cardio",
-                "immuno",
-                "neuro",
-                "cyto",
-                "heme",
-                "psycho",
-                "socio",
-
-                "less",
-                "fold",
-                "able",
-                "ability",
-
-                "alkyl",
-                "acetyl",
-                "amino",
-                "oxy",
-                "deoxy",
-                "ol",
-                "ase",
-                "methyl",
-                "ethyl",
-                "iodo",
-                "nitro",
-                "aryl",
-                "hydroxyl",
-                "amine",
-                "phenyl",
-                "ester",
-                "chloro",
-                ".*oxy.*",
-                ".*fluor.*",
-                ".*amine.*",
-                ".*yl",
-
-                "ic",
-                "al",
-                "ally",
-                "ly",
-                "ed",
-                "es",
-                "us",
-                "ex",
-                "dia",
-                "ism",
-                "id",
-                "ia",
-
-                # Could be either
-                "self", # hyphenated?
-                "an",
-                "if",
-                "in",
-                "is",
-                "it",
-                "nor",
-                "on",
-                "or"
-                "ions?",
-                ) :
-  for p in ("^.*_"+pattern+"$", "^"+pattern+"_.*$") :
-      matches = []
-      non_matches = []
-
-      for w in word_score :
-        #if "_" in alternative[w[0]] : pdb.set_trace ()
-        if re.match(p, alternative[w[0]]) :
-          matches.append(w)
-        else :
-          non_matches.append(w)
-
-      word_score = non_matches
-
-      printed = False
-      for w in sorted (matches, key = lambda x : -x[1]) :
-        print (answers[w[0]]+w[0], alternative[w[0]], w[1], err_types[w[0]])
-        printed = True
-      if printed :
-        print ()
-
-for w in sorted (word_score, key = lambda x : -x[1]) :
-  print (answers[w[0]]+w[0], alternative[w[0]], w[1], err_types[w[0]])
-
-print ("\n----------\n")
-"""
 
 has_space = [w for w in word_score if "_" in alternative[w[0]]]
 no_space = [w for w in word_score if "_" not in alternative[w[0]]]
