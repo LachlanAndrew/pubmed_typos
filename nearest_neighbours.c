@@ -42,7 +42,8 @@ is_lower(const char *str)
 bool
 is_alpha(const char *str)
 {
-    while ((*str >= 'a' && *str <= 'z') || (*str >= 'A' && *str <= 'Z'))
+    //while ((*str >= 'a' && *str <= 'z') || (*str >= 'A' && *str <= 'Z'))
+    while ((unsigned int)((*str | ('a'-'A')) - 'a') <= 'z'-'a')
         str++;
     return *str == '\0';
 }
@@ -55,7 +56,8 @@ is_alpha(const char *str)
 err_cause
 err_type (diff *a)
 {
-    static const char *ocr[] = {"il", "litI", "tlI", "oc", "coe", "ec", "yv", "vy", "hnb", "nhru", "rn", "un", "gq", "qg", "CO", "DO", "OCDQ", "QO", "IlE", "EI", "HM", "MH", "PT", "TP"};
+    // First char could be an optical char recognition error for remaining chars
+    static const char *ocr[] = {"il", "litI", "tlI", "oc", "coe", "ec", "yv", "vy", "hnb", "nhru", "rn", "un", "gq", "qg", "CO", "DO", "OCDQ", "QO", "IltE", "ECI", "HM", "MH", "PT", "TP", "Jdl", "Lbh"};
     static const char *keyboard [] = {"qwertyuiop", "asdfghjkl", "zxcvbnm"};
     static const char *confusion[]= {"cksqz", "kc", "nm", "mn", "qc", "st", "tds", "zc", "aeio", "eai", "ia", "oa"};
     //static const char **affixes[]= {{"able", "ible"}};
@@ -122,7 +124,7 @@ err_type (diff *a)
 
     if (a->type == '*') {       // double
         if (!a->context_before[0]                       // doubled first letter
-            || a->context_before[0] == a->context_before[1]     // tripple
+            || a->context_before[0] == a->context_before[1]     // triple
             || strchr ("qwyuihjkxv", a->change[0]))     // uncommon double
             return typing_err;
         return spelling_err;
@@ -296,6 +298,10 @@ main (int argc, char *argv[])
 
     int i;
 
+    char *filename = "words_classified_caps_1-1166.txt";
+    if (argc > 1)
+        filename = argv[1];
+
     if (!data || !diffs || !neighbours || !ngbr_data) {
         fprintf (stderr, "Failed to allocate memory\n");
         exit(1);
@@ -305,8 +311,8 @@ main (int argc, char *argv[])
     for (i = 0; i < word_count; i++)
         neighbours[i] = ngbr_data + i*ngbr_count;
 
-    if ((fp = fopen ("words_classified_caps_1-1166.txt", "r")) == NULL) {
-        fprintf (stderr, "Could not open file for reading\n");
+    if ((fp = fopen (filename, "r")) == NULL) {
+        fprintf (stderr, "Could not open %s for reading\n", filename);
         exit(1);
     }
 
