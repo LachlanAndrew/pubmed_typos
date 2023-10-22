@@ -152,5 +152,7 @@ for line in sys.stdin :
   #if len(line) >= 5 and line[1:3] in elements and line[3:5] in elements :
   if is_compound (line.strip()) :
     print ("&"+line, end="")
+  elif len (line) > 1 and is_compound (line.split()[0]) :
+    print ("&"+line, end="")
   else :
     print (line, end="")
