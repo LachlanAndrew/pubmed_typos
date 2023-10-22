@@ -239,7 +239,7 @@ in_brackets = re.compile(r"\(\w*[A-Z]\w*\)")
 any_cap = re.compile (r"\b\w*[A-Z]\w*\b")
 
 surname = re.compile(r"\b[A-Z][a-z]*(?: et al|, [A-Z]\.)")
-abbrev1 = re.compile(r"\b\w*[A-Z]\w* (?:\w* ){1,6}\([A-Z]*\)")
+abbrev1 = re.compile(r"\b\w*[A-Z]\w* (?:\w* ){1,6}\([A-Z]{2,}\)")
 abbrev2 = re.compile(r"\b[A-Z]{4,} (?:\w* ){,2}\(\w[-\w ]*\)")
 abbrev3 = re.compile(r"\b[A-Z][-A-Z]+ \([A-Za-z][-A-Za-z ]*\)")
 # r.e. for ACRONYM (ExPanSiON)
@@ -349,17 +349,53 @@ for loop in range(1) :
         # abbrev1 catches too many phrases, so cull those that don't match
         ma1_tidied = []
         for i, p in enumerate(ma1) :
+          done = False
           pp = p.split()
           acronym = pp[-1][1:-1]
-          capitals = [j for j, c in enumerate(p)
-                        if c.isupper() and j < len(p) - len (pp[-1])]
-          if len (capitals) >= len (acronym) :
-            start_from = capitals[-len (acronym)]
-            start_from = p[start_from].rfind(" ") + 1
-            print ("ab", [p[start_from:], p])
-            p = p[start_from:]
+          if len (acronym) < len (pp) :
+            lead_up = pp[-len(acronym)-1:-1]
+            initials = "".join([a[0] for a in lead_up]).lower()
+            if initials == acronym.lower() :
+              pp = "".join ([" ".join(lead_up), " (", acronym, ")"])
+              #print ("ab*", [pp, p])
+              p = pp
+              done = True
+            elif initials[-1] == acronym[-1].lower() :
+              lead_up2 = [w for w in pp if len(w) > 2]
+              if len (acronym) < len (lead_up2) :
+                lead_up2 = lead_up2[-len(acronym)-1:-1]
+                initials2 = "".join([a[0] for a in lead_up2]).lower()
+                if initials2 == acronym.lower() :
+                  pp = "".join ([" ".join(lead_up2), " (", acronym, ")"])
+                  #print ("ab!", [pp, p])
+                  p = pp
+                  done = True
 
-          ma1_tidied.append(p)
+          if not done :
+            capitals = [(j,c) for j, c in enumerate(p)
+                          if c.isupper() and j < len(p) - len (pp[-1])]
+            if len (capitals) >= len (acronym) :
+              start_from = capitals[-len (acronym)][0]
+              start_from = p[start_from].rfind(" ") + 1
+              actual_capitals = "".join([c[1] for c in capitals[-len(acronym):]])
+              if actual_capitals == acronym.upper() :
+                #print ("ab+", [p[start_from:], p])
+                p = p[start_from:]
+                done = True
+
+          if not done :
+            r = re.search(r".*\b(" + ".*".join(acronym) + "[^ ]*)",
+                         " ".join(pp[:-1]), flags=re.I)
+            if r :
+              #print ("ab=", [r.group(1), p])
+              p = "".join ([r.group(1), " (", acronym, ")"])
+              done = True
+
+          if done :
+            ma1_tidied.append(p)
+
+        #if ma1_tidied :
+        #  print ("ab", ma1_tidied)
 
         for abr in (ma, ma1_tidied, ma2, ma3) :
           for a in abr :
