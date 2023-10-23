@@ -192,7 +192,8 @@ if __name__ == "__main__" :
       break
 
   if len(sys.argv) < 2 :
-    print (f"usage: {sys.argv[0]} cmd args", file=sys.stderr)
+    print (f"usage: {sys.argv[0]} cmd [-m model] [-n topn] [-d]",
+           file=sys.stderr)
     exit(1)
 
   if sys.argv[1] == "build" :
@@ -216,7 +217,8 @@ if __name__ == "__main__" :
             print (lang, end="...", file=sys.stderr, flush=True)
             dicts[lang] = {w.rstrip() for w in f.readlines()}
 
-    italian_vocab.read_vocab("words_it_cache.txt", "words_it.txt")
+    if "it" in sys.argv[3:] :
+      italian_vocab.read_vocab("words_it_cache.txt", "words_it.txt")
 
     with open (sys.argv[2], "r") as f :
       for word in f :
@@ -234,11 +236,13 @@ if __name__ == "__main__" :
                     and word[0].upper()+word[1:].lower() in dicts[lang])) :
               dict_entries.append(lang)
 
-          if italian_vocab.known(word) or italian_vocab.known(word.lower()) :
+          if "it" in sys.argv[3:] and (italian_vocab.known(word)
+                                    or italian_vocab.known(word.lower())) :
             dict_entries.append("it")
 
-          if ((chinese.known(word) or chinese.known(word.lower()))
-                 and not "zh" in dict_entries) :
+          if "zh" in sys.argv[3:] and ((chinese.known(word)
+                                     or chinese.known(word.lower())
+                                       ) and not "zh" in dict_entries) :
             dict_entries.append("zh")
 
           if "oth" in dict_entries :

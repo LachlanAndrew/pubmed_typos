@@ -19,9 +19,12 @@ languages.extend (["maual_"+a for a in langs])
 languages = {a:"words_"+a+".txt" for a in languages }
 
 priority = {lang: ["oth"] for lang in langs}
-del priority["oth"]
-priority["pl"].append("slv")
-priority["en"].append("md")
+if "oth" in priority :
+  del priority["oth"]
+if "pl" in priority :
+  priority["pl"].append("slv")
+if "en" in priority :
+  priority["en"].append("md")
 
 #languages.update({"hi":"words_hawaiian.txt",
 #                  "id":"words_indonesian.txt",

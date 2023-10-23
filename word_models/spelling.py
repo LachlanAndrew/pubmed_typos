@@ -1,5 +1,5 @@
-#!/home/llandrew/anaconda3/bin/python
 #!/usr/bin/python3
+#!/home/llandrew/anaconda3/bin/python
 
 import sys
 import difflib as dl
@@ -22,12 +22,6 @@ if len (sys.argv) > 2 :
   sys.argv = sys.argv[1:]
 else :
   model_prefix = None
-
-# "zh" and "it" are separate
-# If these are changed, also update loading of foreign words, below
-models = guess_lang.init(["en", "ar", "cy", "da", "de", "es", "fr",
-                          "hi", "in", "jp", "kr", "ma", "md", "nl", "pl",
-                          "sm", "slv", "tl"], prefix = model_prefix)
 
 fast = False
 
@@ -1347,41 +1341,18 @@ if not fast :
                      "words_foreign.txt", "words_trademarks.txt",
                      "words_medical.txt") :
     print (f"Loading {extra_file}...", file=sys.stderr)
-    with open (extra_file, "r") as f :
-      extra = f.readlines();
-    #extra = [e.rstrip() for e in extra if not e.startswith('#')]
-    extra = [e[0:(e.find('#') % (len(e)+1))].rstrip() for e in extra]
-    spell.word_frequency.load_words(extra)
+    try :
+      with open (extra_file, "r") as f :
+        extra = f.readlines();
+      #extra = [e.rstrip() for e in extra if not e.startswith('#')]
+      extra = [e[0:(e.find('#') % (len(e)+1))].rstrip() for e in extra]
+      spell.word_frequency.load_words(extra)
+    except IOerrorException :
+      print (f"Skipping {extra_file", file=sys.stderr)
   extra = ""    # clear memory
 
   for extra in (space_separated, dash_separated) :
     spell.word_frequency.load_words([w for w in extra])
-
-foreign = {}
-foreign_counts = {"total": 0}
-if not fast :
-  print ("Loading foreign words...", file=sys.stderr)
-  for lang in ("fr", "de", "es", "nl", "cy", "da", # "it",
-               "ar", "jp", "kr", "pl", "sm", "vn", "zh",
-               "tagalog", "indonesian", "hindi", "hawaiian", "maori") :
-    print (lang, end="...", file=sys.stderr, flush=True)
-
-    with open ("words_"+lang+".txt") as f :
-      extras = {e.rstrip() for e in f.readlines() if not e.startswith('#')}
-
-    extra_no_accent = {unidecode.unidecode(e.lower()) for e in extras}
-
-    foreign[lang] = extras.union(extra_no_accent)
-    foreign_counts[lang] = 0
-
-  # Special case with compression, as vocab is > 10 times larger than others
-  lang = "it"
-  print (lang, end="...", file=sys.stderr, flush=True)
-  italian_vocab.read_vocab("words_it_cache.txt", "words_it.txt")
-  foreign_counts[lang] = 0
-  print (file=sys.stderr)
-
-  foreign_counts["zh"] = 0
 
 # Process command line arguments
 if len (sys.argv) > 1 and sys.argv[1] == "--learn" :
@@ -1393,10 +1364,58 @@ else :
 if len (sys.argv) > 1 :
   if sys.argv[1] == '-' :
     in_file = ""
+    del sys.argv[1]
   else :
     in_file = sys.argv[1]
 else :
   in_file = "single_words_tmp"
+
+if len (sys.argv > 1) :
+  if sys.argv[1] == "--" :
+else :
+  languages = ["en", "ar", "cy", "da", "de", "es", "fr",
+               "hi", "in", "it", "jp", "kr", "ma", "nl", "pl",
+               "sm", "slv", "tl", "zh",
+               "vn",
+               "med", "chem"]
+
+  # "zh" and "it" are separate
+  # If these are changed, also update loading of foreign words, below
+models = guess_lang.init([l for l in languages if l not in ("zh", "it")], prefix = model_prefix)
+
+foreign = {}
+foreign_counts = {"total": 0}
+if not fast :
+  print ("Loading foreign words...", file=sys.stderr)
+  lang_map = {"tl": "tagalog", "id": "indonesian", "in": "hindi",
+              "hi": "hawaiian", "ma": "maori"}
+  #for lang in ("fr", "de", "es", "nl", "cy", "da", # "it",
+  #             "ar", "jp", "kr", "pl", "sm", "vn", "zh",
+  #             "tagalog", "indonesian", "hindi", "hawaiian", "maori") :
+  for lang in (l for l in languages if l != "en")
+    if lang in lang_map :
+      lang = lang_map[lang]
+    print (lang, end="...", file=sys.stderr, flush=True)
+
+    with open ("words_"+lang+".txt") as f :
+      extras = {e.rstrip() for e in f.readlines() if not e.startswith('#')}
+
+    extra_no_accent = {unidecode.unidecode(e.lower()) for e in extras}
+
+    foreign[lang] = extras.union(extra_no_accent)
+    foreign_counts[lang] = 0
+
+  # Special case with compression, as vocab is > 10 times larger than others
+  if "it" in languages :
+    lang = "it"
+    print (lang, end="...", file=sys.stderr, flush=True)
+    italian_vocab.read_vocab("words_it_cache.txt", "words_it.txt")
+    foreign_counts[lang] = 0
+    print (file=sys.stderr)
+
+  if "zh" in languages :
+    foreign_counts["zh"] = 0
+
 
 print ("Processing words from", in_file, "...", file=sys.stderr)
 all_words = []
@@ -1665,14 +1684,15 @@ for word in all_words:
         if not learning :
           words[word]["##"][lang] = word
           print (word, word, "##", lang)
-    if italian_vocab.known(word) or italian_vocab.known(low) :
+    if "it" in languages and (italian_vocab.known(word)
+                           or italian_vocab.known(low)) :
       lang = "it"
       foreign_counts[lang] += 1
       any_foreign = True
       if not learning :
         words[word]["##"][lang] = word
         print (word, word, "##", lang)
-    if chinese.known(word) or chinese.known(low) :
+    if "zh" in languages and (chinese.known(word) or chinese.known(low)) :
       lang = "zh"
       foreign_counts[lang] += 1
       any_foreign = True
