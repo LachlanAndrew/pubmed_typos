@@ -9,6 +9,9 @@ import pdb
 
 file_suffix = "_caps_1-1166"
 
+if len(argv) > 1 :
+  file_suffix = argv[1]
+
 features1 = {}
 alternative = {}
 word_counts = {}
