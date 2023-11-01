@@ -7,12 +7,12 @@ import unidecode
 
 import pdb
 
+sys.path.insert(0, "../../pyspellchecker")
+sys.path.insert(0, "../")
 from spellchecker import SpellChecker
 import autodict
 
 from known_errs import known_errs, deliberate_misspellings, equivalents
-from words_space_separated import space_separated, dash_separated
-import hyphenation
 import italian_vocab
 import chinese
 import guess_lang
@@ -1347,12 +1347,16 @@ if not fast :
       #extra = [e.rstrip() for e in extra if not e.startswith('#')]
       extra = [e[0:(e.find('#') % (len(e)+1))].rstrip() for e in extra]
       spell.word_frequency.load_words(extra)
-    except IOerrorException :
-      print (f"Skipping {extra_file", file=sys.stderr)
+    except FileNotFoundError :
+      print (f"Skipping {extra_file}", file=sys.stderr)
   extra = ""    # clear memory
 
-  for extra in (space_separated, dash_separated) :
-    spell.word_frequency.load_words([w for w in extra])
+  try :
+    from words_space_separated import space_separated, dash_separated
+    for extra in (space_separated, dash_separated) :
+      spell.word_frequency.load_words([w for w in extra])
+  except ModuleNotFoundError :
+    print ("Could not find module words_space_separated. Skipping", file=sys.stderr)
 
 # Process command line arguments
 if len (sys.argv) > 1 and sys.argv[1] == "--learn" :
@@ -1364,23 +1368,24 @@ else :
 if len (sys.argv) > 1 :
   if sys.argv[1] == '-' :
     in_file = ""
-    del sys.argv[1]
   else :
     in_file = sys.argv[1]
+  del sys.argv[1]
 else :
   in_file = "single_words_tmp"
 
-if len (sys.argv > 1) :
-  if sys.argv[1] == "--" :
-else :
-  languages = ["en", "ar", "cy", "da", "de", "es", "fr",
-               "hi", "in", "it", "jp", "kr", "ma", "nl", "pl",
-               "sm", "slv", "tl", "zh",
-               "vn",
-               "med", "chem"]
+languages = ["en", "ar", "cy", "da", "de", "es", "fr",
+           "hi", "in", "it", "jp", "kr", "ma", "nl", "pl",
+           "sm", "slv", "tl", "zh",
+           "vn",
+           "med", "chem"]
+
+if len (sys.argv) > 1 and sys.argv[1] == "--" :
+    languages = sys.argv[2:]
 
   # "zh" and "it" are separate
   # If these are changed, also update loading of foreign words, below
+print ("Initializing models...", file=sys.stderr)
 models = guess_lang.init([l for l in languages if l not in ("zh", "it")], prefix = model_prefix)
 
 foreign = {}
@@ -1392,7 +1397,7 @@ if not fast :
   #for lang in ("fr", "de", "es", "nl", "cy", "da", # "it",
   #             "ar", "jp", "kr", "pl", "sm", "vn", "zh",
   #             "tagalog", "indonesian", "hindi", "hawaiian", "maori") :
-  for lang in (l for l in languages if l != "en")
+  for lang in (l for l in languages if l != "en") :
     if lang in lang_map :
       lang = lang_map[lang]
     print (lang, end="...", file=sys.stderr, flush=True)
@@ -1428,14 +1433,19 @@ with open (in_file, "r") if in_file else sys.stdin as f :
       continue
 
     low = word.lower ()
-    if low in hyphenation.firsts or low in hyphenation.seconds :
-      continue
+
+    if False :
+      import hyphenation
+      if low in hyphenation.firsts or low in hyphenation.seconds :
+        continue
 
     all_words.append (word)
+    if len (all_words) % 1024 == 0 :
+      print (len(all_words), "processed\r", file=sys.stdout)
 
 word_idx = {idx:word for word, idx in enumerate (all_words)}
 
-print (len (all_words), "words")
+print (len (all_words), "words              ")
 
 ## Names
 name_suffix_exclusions = {
