@@ -57,7 +57,7 @@ err_cause
 err_type (diff *a)
 {
     // First char could be an optical char recognition error for remaining chars
-    static const char *ocr[] = {"il", "litI", "tlI", "oc", "coe", "ec", "yv", "vy", "hnb", "nhru", "rn", "un", "gq", "qg", "CO", "DO", "OCDQ", "QO", "IltE", "ECI", "HM", "MH", "PT", "TP", "Jdl", "Lbh"};
+    static const char *ocr[] = {"il", "litI", "tlI", "oc", "coer", "ec", "yv", "vy", "hnb", "nhru", "rnc", "un", "gq", "qg", "CO", "DO", "OCDQ", "QO", "IltE", "ECI", "HM", "MH", "PT", "TP", "Jdl", "Lbh"};
     static const char *keyboard [] = {"qwertyuiop", "asdfghjkl", "zxcvbnm"};
     static const char *confusion[]= {"cksqz", "kc", "nm", "mn", "qc", "st", "tds", "zc", "aeio", "eai", "ia", "oa"};
     //static const char **affixes[]= {{"able", "ible"}};
