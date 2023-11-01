@@ -33,9 +33,11 @@ def save (contexts, fname) :
   with open (fname, "wb") as f :
     pickle.dump (contexts,f)
 
+current_context = ""
 def load (fname) :
-  with open (fname, "rb") as f :
-    return pickle.load (f)
+  if fname != current_context :
+    with open (fname, "rb") as f :
+      return pickle.load (f)
 
 contexts = {}
 def build_contexts (infile, outfile) :
@@ -73,11 +75,11 @@ def missing_letters (ctxt, contexts) :
 
   return neighbours
 
-def neighbours (word : str) :
+def neighbours (word : str, contexts) :
   ngbrs = []
   word = "^^" + word + "$$"
 
-  for i in range (2, len(word) - 3) :
+  for i in range (2, len(word) - 2) :
     pref = word[2:i]
 
     # substitution errors
