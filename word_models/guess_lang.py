@@ -38,34 +38,42 @@ def build_model (word_file, n) :
   n_grams = {x:{} for x in range(0,n+1)}
   for N in range (n, -1, -1) :
     n_gram = None
-    for ng in sorted (n_plus_1_gram_counts) :
+    keys = sorted (n_plus_1_gram_counts)
+    keys.append ("sentinel")
+    for ng in keys :
       next_n = ng[:-1]
       if n_gram != next_n :
         if n_gram == None :
           n_gram = next_n
         else :
           s = sum([counts[x] for x in counts])
+          k = len(counts)
           if not n_gram.startswith('^^') :     # at most one ^ at the start
-            n_grams[N][n_gram] = {c:math.log (counts[c]/s) for c in counts}
+            #n_grams[N][n_gram] = {c:math.log (counts[c]/s) for c in counts}
+
+            # partial prefix match method C
+            n_grams[N][n_gram] = {c:math.log (counts[c]/(s+k)) for c in counts}
+            n_grams[N][n_gram]["ESC"] = math.log (k/(s+k))
+
+            ## partial prefix match method D
+            #n_grams[N][n_gram] = {c:math.log ((counts[c] - k/2)/(s)) for c in counts}
+            #n_grams[N][n_gram]["ESC"] = math.log (k/(2*s))
 
           n_gram = next_n
           counts = {}
 
-      counts[ng[-1]] = n_plus_1_gram_counts[ng]
+      if ng != "sentinel" :
+        counts[ng[-1]] = n_plus_1_gram_counts[ng]
 
-    # process last case.  Should we put a sentinel in n_plus_1_gram_counts?
-    s = sum([counts[x] for x in counts])
-    n_grams[N][n_gram] = {c:math.log (counts[c]/s) for c in counts}
-
-
+    # Calculate counts for shorter prefixes
     if N > 0 :
       new_n = {}
       for key in n_plus_1_gram_counts :
         suff = key[1:]
         if suff in new_n :
-          new_n[suff] += 1
+          new_n[suff] += n_plus_1_gram_counts[key]
         else :
-          new_n[suff] = 1
+          new_n[suff] = n_plus_1_gram_counts[key]
       n_plus_1_gram_counts = new_n
 
   # compress to variable n?
@@ -85,26 +93,27 @@ def word_prob (word, model) :
     for i in range (pos) :
       history = word[i:pos]
       if history in model :
-        if history not in model :
-          # Should penalize this
-          history = history.lower()
         try :
           log_likelihood += model[history][word[pos]]
-        except :
+          done = True
+          pos += 1
+          break
+        except KeyError:
           low = word[pos].lower()
           if low in model[history] :
             # Should penalize this
             log_likelihood += model[history][low]
+            done = True
+            pos += 1
+            break
           else :
             #pdb.set_trace ()
-            log_likelihood += -20
+            #log_likelihood += -20
+            log_likelihood += model[history]["ESC"]
         #print (int(log_likelihood), end = " ")
-        log_likelihood -= 3*i     # penalize shorter histories
-        done = True
-        pos += 1
-        break
+        #log_likelihood -= 3*i     # penalize shorter histories
 
-    if not done :       # Transisition so unlikely, it was never seen
+    if not done :       # Transition so unlikely, it was never seen
                         # Should use "smoothing", but this will disappear
                         # when the variable-length prefixes are implemented
       log_likelihood += -20
@@ -204,6 +213,13 @@ if __name__ == "__main__" :
       #with open ("tmppp", "w")  as f :
       #  for key in model :
       #    print (str({key:model[key]})[1:-1], file=f)
+
+      #with open (sys.argv[2*i+1], "r") as f :
+      #  for word in f :
+      #    word = word.rstrip()
+      #    if word :
+      #      pr = word_prob (word, model)
+      #      print (word, pr, pr * (len(word) + 1))
 
   if sys.argv[1] == "guess" :
     models = {}
