@@ -45,7 +45,7 @@ def include (word) :
              ("zyg", 1),
              ("tomy", 1),
              ("diagnos", 1),
-             ("lepto", 1),
+             ("lepto", 1, (("klepto", 0),)),
              ("megaly", 1),
              ("mening", 1),
              ("metabo", 1),
@@ -254,6 +254,8 @@ def include (word) :
              ("morphs$", 4, (("endomorph", 1), ("ectomorph", 1))),
              ("morpha$", 4),
              ("anthus", 4),
+
+             ("fluor", 5, (("fluoresc", 0),)),
 
           )
 
