@@ -126,6 +126,7 @@ def word_prob (word, model) :
     
 
 def guess_lang (word, models, topn = None) :
+  other_penalty = 1.5
   if topn == None :
     best_prob = -1000000000
     best_lang = ""
@@ -133,6 +134,8 @@ def guess_lang (word, models, topn = None) :
       #print (lang, word, end="\t")
       #if lang == "zh": pdb.set_trace()
       score = word_prob (word, models[lang])
+      if lang == "oth" :        # Hack: try to classify a word as a specific
+        score *= other_penalty  #       language, not "other"
       if score > best_prob :
         best_prob = score
         best_lang = lang
@@ -140,7 +143,10 @@ def guess_lang (word, models, topn = None) :
   else :
     scores = []
     for lang in models :
-      scores.append ((-word_prob (word, models[lang]), lang))
+      score = -word_prob (word, models[lang])
+      if lang == "oth" :        # Hack: try to classify a word as a specific
+        score *= other_penalty  #       language, not "other"
+      scores.append ((score, lang))
     scores.sort()
     best_lang = [ s[1] for s in scores[0:topn]]
     best_prob = [-s[0] for s in scores[0:topn]]
