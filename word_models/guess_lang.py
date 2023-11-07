@@ -59,6 +59,8 @@ def build_model (word_file, n) :
             #n_grams[N][n_gram] = {c:math.log ((counts[c] - k/2)/(s)) for c in counts}
             #n_grams[N][n_gram]["ESC"] = math.log (k/(2*s))
 
+            n_grams[N][n_gram]["sum"] = s
+
           n_gram = next_n
           counts = {}
 
@@ -83,7 +85,9 @@ def build_model (word_file, n) :
 
   return n_grams[n]
 
-def word_prob (word, model) :
+esc_counts = {}
+non_esc_counts = {}
+def word_prob (word, model, count_escapes=False) :
   word = "^" + word + "$"
   pos = 1       # char after ^
   log_likelihood = 0
@@ -97,6 +101,17 @@ def word_prob (word, model) :
           log_likelihood += model[history][word[pos]]
           done = True
           pos += 1
+
+          if count_escapes :
+            k = min (len(model[history])-2, 18)       # exclude ESC, sum
+            s = min (model[history]["sum"], 48)
+            if k not in non_esc_counts :
+              non_esc_counts[k] = {s: 1}
+            elif s not in non_esc_counts[k] :
+              non_esc_counts[k][s] = 1
+            else :
+              non_esc_counts[k][s] += 1
+
           break
         except KeyError:
           low = word[pos].lower()
@@ -105,11 +120,34 @@ def word_prob (word, model) :
             log_likelihood += model[history][low]
             done = True
             pos += 1
+
+            # TODO: reduce duplication of the above
+            if count_escapes :
+              k = min (len(model[history])-2, 18)       # exclude ESC, sum
+              s = min (model[history]["sum"], 48)
+              if k not in non_esc_counts :
+                non_esc_counts[k] = {s: 1}
+              elif s not in non_esc_counts[k] :
+                non_esc_counts[k][s] = 1
+              else :
+                non_esc_counts[k][s] += 1
+
             break
           else :
             #pdb.set_trace ()
             #log_likelihood += -20
             log_likelihood += model[history]["ESC"]
+
+            if count_escapes :
+              k = min (len(model[history]) - 2, 18)     # exclude ESC, sum
+              s = min (model[history]["sum"], 48)
+              if k not in esc_counts :
+                esc_counts[k] = {s: 1}
+              elif s not in esc_counts[k] :
+                esc_counts[k][s] = 1
+              else :
+                esc_counts[k][s] += 1
+
         #print (int(log_likelihood), end = " ")
         #log_likelihood -= 3*i     # penalize shorter histories
 
@@ -125,7 +163,7 @@ def word_prob (word, model) :
   return log_likelihood / (len (word) - 1)      # didn't guess "^"
     
 
-def guess_lang (word, models, topn = None) :
+def guess_lang (word, models, topn = None, count_escapes=False) :
   other_penalty = 1.5
   if topn == None :
     best_prob = -1000000000
@@ -133,7 +171,7 @@ def guess_lang (word, models, topn = None) :
     for lang in models :
       #print (lang, word, end="\t")
       #if lang == "zh": pdb.set_trace()
-      score = word_prob (word, models[lang])
+      score = word_prob (word, models[lang], count_escapes)
       if lang == "oth" :        # Hack: try to classify a word as a specific
         score *= other_penalty  #       language, not "other"
       if score > best_prob :
@@ -143,7 +181,7 @@ def guess_lang (word, models, topn = None) :
   else :
     scores = []
     for lang in models :
-      score = -word_prob (word, models[lang])
+      score = -word_prob (word, models[lang], count_escapes)
       if lang == "oth" :        # Hack: try to classify a word as a specific
         score *= other_penalty  #       language, not "other"
       scores.append ((score, lang))
@@ -242,10 +280,12 @@ if __name__ == "__main__" :
     if "it" in sys.argv[3:] :
       italian_vocab.read_vocab("words_it_cache.txt", "words_it.txt")
 
+    count_escapes = (sys.argv[2] == "../checked_words.txt")
+
     with open (sys.argv[2], "r") as f :
       for word in f :
         word = word.rstrip()
-        guesses, scores = guess_lang (word.lower(), models, topn)
+        guesses, scores = guess_lang (word.lower(), models, topn, count_escapes)
         guess = ','.join(guesses)
         score = scores[0]
 
@@ -281,4 +321,21 @@ if __name__ == "__main__" :
             if dict_entries :
               guess = guess+lang_list(dict_entries, "?")
 
-        print (word, guess, score)
+        #print (word, guess, score)
+
+    if count_escapes :
+      with open ("esc_counts.txt", "w") as f, open("esc_frac.txt", "w") as f1 :
+        for k in range (1, 18+1) :
+          for s in range (1, 48+1) :
+            try :
+              print (esc_counts[k][s] / (esc_counts[k][s] + non_esc_counts[k][s]),
+                     end=" ", file=f1)
+              print ("%d/%d" % (esc_counts[k][s], (esc_counts[k][s] + non_esc_counts[k][s])),
+                     end=" ", file=f)
+            except KeyError :
+              print (0 if k not in esc_counts or s not in esc_counts[k] else 1,
+                     end= " ", file=f1)
+              print (0 if k not in esc_counts or s not in esc_counts[k] else 1,
+                     end= " ", file=f)
+          print (file=f)
+          print (file=f1)
