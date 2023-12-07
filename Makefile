@@ -41,5 +41,5 @@ url_docs.txt:
 	zgrep -i '\<\(http\)\|\(https\)|\(ftp\)\|\(www\)\|\(\<htm\>\)\|\(html\)\>' abstracts_1-1166.txt.gz | sed "s/ .*//" > $@.part
 	zgrep -i '\.\(\(edu\>\)\|\(com\>\)\|\(org\>\)\|\(gov\>\)\|\(net\>\)\)' abstracts_1-1166.txt.gz | sed "s/ .*//" >> $@.part
 	zgrep -i '\.\(\(ca\)\|\(it\)\|\(de\)\|\(dk\)\|\(nl\)\|\(ch\)\|\(fr\)\|\(uk\)\|\(au\)\)/' abstracts_1-1166.txt.gz | sed "s/ .*//" >> $@.part
-	sort -u < $@.part > $@
+	sort -u -n < $@.part > $@
 	rm $@.part

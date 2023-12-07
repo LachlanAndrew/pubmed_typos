@@ -73,6 +73,7 @@ err_type (diff *a)
             return ocr_err;
     }
 
+    // Identify keyboard positions of the new letter and its context
     int r0 = -2, c0 = -2, r1 = -2, c1 = -2, r2 = -2, c2 = -2;;
     int ch0 = tolower(a->change[0]);
     int ch1, ch2;
@@ -148,19 +149,22 @@ err_type (diff *a)
 // / A double letter in a can become single in a
 // X Two adjacent letters can be transposed,
 // + A letter or space can be added in b
-// - A letter in a can be dropped
+// - A letter in a can be dropped in b
 // R A letter in a can be replaced by another in b.
+// # The wrong letter was doubled
 void
 find_diff (char *a, char *b, diff *d)
 {
     int len_a = strlen(a);
     int len_b = strlen(b);
     int min_len = len_a < len_b ? len_a : len_b;
-    int i, err_pos1;
+    int i,ja, jb, err_pos1;
     char *err_pos2;
 
+    // Find first difference.
     for (i = 0; i < min_len && a[i] == b[i]; i++)
         ;
+
     err_pos1 = i;
     if (len_a == len_b) {       // Transpose or replace
         d->change[0] = a[i];
@@ -200,6 +204,25 @@ find_diff (char *a, char *b, diff *d)
             d->type = '-';
         }
     }
+
+#if 0
+    // The code below only works if there is only one difference, so check.
+    if (abs (len_a - len_b) > 1)
+        d->type = '?';
+    else {
+        // Find the last difference
+        for (ja = len_a, jb = len_b; ja >= 0 && jb >= 0 && a[ja] == b[jb];
+                                     ja--, jb--)
+            ;
+        // Check it refers to the same difference
+        if ( ((d->type == 'R' || d->type == '#') && ja > i)
+          || ((d->type == '/' || d->type == '-') && ja >= i && ja > 0)
+          || ((d->type == '*' || d->type == '+' || d->type == 'X') && ja > i+1)
+           ) {
+            d->type = '?';      // unknown
+        }
+#endif
+
     strlcpy(d->context_after, err_pos2, sizeof(d->context_after));
     //fprintf(stderr, "err_pos2 %ld %x %ld %d\n", err_pos2 - a, err_pos2[1], err_pos2 - b, i);
     char *dcb = d->context_before;

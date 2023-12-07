@@ -1,10 +1,10 @@
 
-LANGS  = en ar chem da de es fr in     it jp kr med nl pl zh oth
-#LANGS1 = en ar chem da de es fr hindi  it jp kr med nl pl zh oth
-LANGS1 = $(LANGS)
+#LANGS  = en ar chem da de es fr in     it jp kr med nl pl zh oth taxa
+##LANGS1 = en ar chem da de es fr hindi  it jp kr med nl pl zh oth
+#LANGS1 = $(LANGS)
 
-#LANGS  = en chem med taxa
-#LANGS1 = en chem med taxa
+LANGS  = en chem med taxa oth
+LANGS1 = en chem med taxa oth
 
 #SOURCE = captial_words.txt
 SOURCE = ../checked_words.txt

@@ -13,10 +13,19 @@ def first_ascii_letters (line) :
     return line
 
 line_key = lambda x: x
-if len (sys.argv) > 1 :
-  if sys.argv[1] == "--first" :
-    line_key = first_ascii_letters
-    del sys.argv[1]
+while len (sys.argv) > 1 :
+  if sys.argv[1].startswith('-') :
+    if sys.argv[1] == "--first" :
+      line_key = first_ascii_letters
+      del sys.argv[1]
+
+    if sys.argv[1] == "--help" :
+      print (f"Usage: {sys.argv[0]} [--first] [--help] [infile [outfile]]",
+             file=sys.stderr)
+
+  else :
+    break
+
 
 omit_words = set()
 if len (sys.argv) > 2 :

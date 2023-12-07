@@ -48,6 +48,81 @@ abbrev_re = re.compile(r"\w[\w.]*\.\w[\w.]*")
 url_re=re.compile(r"(?:(?:(?:http|https|ftp)[:;.l](?:/+|\(/\)/|/\(/\)|@|//@|/ /|\\xc2\\xbf\\xc2\\xbf)? *)?(?:[-\w]+@)?(?:(?:\w+[-\w]* *\. *)+\b(?:com|edu|gov|org|net|ac|ca|fr|de)\b(?:\. *\w+)?|(?:http\W*)?(?:www|ftp). *(?:[-\w]+\. *)*\w+)|(?:http|https|ftp)[:;.l] *(?:/+|\(/\)/|/\(/\)|@|//@|/ /|(?:\\xc2\\xbf)+) *(?:\w+@)?[-\w]+\. *[-\w.]+) *(?::\d+)? *(?:[/\\](?: *(?:approximately|~|\\xe2\\x88\\xbc) +)?(?:~ ?)?(?:[-\w.%#?+_/\\=]|&amp;)*)?|[-\w]+@(?:[-\w]+\.)+\w+|[-\w/]*/[-\w]*\.html?(?:[-\w.%#?+_/\\=]|&amp;)*\b")
 new_url_re=re.compile(r"(?:(?:(?:http|https|ftp|html|www)[:;.l](?:/+|\(/\)/|/\(/\)|@|//@|/ /|\\xc2\\xbf\\xc2\\xbf)? *)?(?:[-\w]+@)?(?:(?:\w+[-\w]* *\. *)+\b(?:com|edu|gov|org|net|ac|ca|fr|de)\b(?:\. *\w+)?|(?:http\W*)?(?:www|ftp|doi:). *(?:[-\w]+\. *)*\w+)|(?:http|https|ftp)[:;.l] *(?:/+|\(/\)/|/\(/\)|@|//@|/ /|(?:\\xc2\\xbf)+) *(?:\w+@)?[-\w]+\. *[-\w.]+) *(?::\d+)? *(?:[/\\](?: *(?:approximately|~|\\xe2\\x88\\xbc) +)?(?:~ ?)?(?:[-\w.%#?+_/\\=]|&amp;)*)?|[-\w]+@(?:[-\w]+\.)+\w+|[-\w/]*/[-\w]*\.html?(?:[-\w.%#?+_/\\=]|&amp;)*\b")
 other_url_re=re.compile(r"(?:http|www)[-:\w.%_/\\=@ ]+\b(?: *h *t *m *l?|com|org|net|edu)\b(?:\.\w+)*(?:[-\w/.]*\w)?(?:\?[-\w.%+_/\\=]*)?(?:#[-w.%+_/\\=]*)?")
+
+def urls_find_tidy_remove (line) :
+  web_urls = url_re.findall(line)
+  web_urls, w_tidy_urls = tidy_urls(web_urls)
+
+  new_urls = new_url_re.findall(line) # TODO: strip (?:[\w.]* ) before "www"
+  new_urls, n_tidy_urls = tidy_urls(new_urls)
+
+  if web_urls :
+    print (line)
+    for i in range(len(new_urls)) :
+      pos = line.find(new_urls[i])
+      pos_end = pos + len(new_urls[i])
+      next_word = re.findall(" *(?:[-\w.%#?+_/\\=]|&amp;)*", line[pos_end:])
+      if next_word :
+        htm  = [i for i, w in enumerate(next_word) if w.find("htm")  != -1]
+        http = [i for i, w in enumerate(next_word) if w.find("http") != -1]
+        www  = [i for i, w in enumerate(next_word) if w.find("www")  != -1]
+        if htm and (not http or htm[0] < http[0]) and (not www or htm[0] < www[0]) :
+          more = "".join(next_word[0:htm[0]+1])
+        else :
+          htm = False
+        #more.find("htm")
+        # Allow spaces if a nearby htm[l]
+        # Count double spaces as one, to match join above
+        if htm  and line[pos_end:pos_end+len(more)] == more :
+          next_word = more
+        else :
+          next_word = next_word[0]
+      next_word = next_word.rstrip().rstrip(".")
+      if ("/" in next_word or "." in next_word or "htm" in next_word) and new_urls[i].find("ftp.") == -1:
+        print (new_urls[i])
+        print (n_tidy_urls[i], new_urls[i].find("ftp."))
+
+        new_urls[i] += next_word
+        n_tidy_urls[i] += next_word.lstrip()
+
+        print (new_urls[i])
+        print (n_tidy_urls[i])
+        #pdb.set_trace ()
+      elif line[pos_end:].startswith(".") :   # avoid out-of-range err
+        next_word = re.findall(". *(?:[-\w.%#?+_/\\=]|&amp;)*", line[pos_end:])
+        if next_word :
+          next_word = next_word[0]
+        next_word = next_word.rstrip().rstrip(".")
+        if next_word.find("htm") != -1 :
+          print (new_urls[i])
+          print (n_tidy_urls[i], new_urls[i].find("ftp."))
+          new_urls[i] += next_word
+          n_tidy_urls[i] += "." + next_word[1:].lstrip()
+          print (new_urls[i])
+          print (n_tidy_urls[i])
+          #pdb.set_trace ()
+
+      count_dict (url, new_urls[i])
+      line = line.replace (new_urls[i], " ", 1)
+    if line.find("www") != -1 or line.find("htm") != -1 or line.find("http") != -1 :
+      other_urls = other_url_re.findall(old_line)
+
+      print (old_line)
+      print (new_urls)
+      print (line.find("www"), line.find("htm"), line.find("http"))
+      a = max(line.find("www"), line.find("htm"), line.find("http"))
+      print (other_urls)
+      print (line[max(0, a-10):min(len(line), a+20)])
+      pdb.set_trace ()
+    if count < 0:
+      pdb.set_trace ()
+  else :
+    #print (line)
+    #pdb.set_trace ()
+    pass
+
+  return [], [], text
+
 abbrev_list = {}
 end_sentence = {}
 url = {}
@@ -92,6 +167,7 @@ with (gzip.open (filename, "r") if filename.endswith(".gz") else open (filename,
     #print (simple_url_re.findall(line))
     old_line = line
 
+    """
     web_urls = url_re.findall(line)
     web_urls, w_tidy_urls = tidy_urls(web_urls)
 
@@ -175,6 +251,7 @@ with (gzip.open (filename, "r") if filename.endswith(".gz") else open (filename,
       #print (line)
       #pdb.set_trace ()
       pass
+    """
 
     abbrevs = abbrev_re.findall(line)
 

@@ -110,12 +110,13 @@ if __name__ == "__main__" :
       print (w)
       showed_known = False
       k = known[w] if w in known else None
-      for g in sorted([(-guess_counts[order[i]], i) for i in range(len(order))]) :
+      for i, g in enumerate (sorted([(-guess_counts[order[i]], i) for i in range(len(order))])) :
         gg = order[g[1]]
         if gg == k :
           print ("*", end="")
           showed_known = True
-        print (gg, guess_counts[gg])
+        print (gg, guess_counts[gg],
+               " " + chr(min(ord('A')+i,126)) if gg == w else "")
       if k and not showed_known :
         print ('=' + k, 0)
       print ()

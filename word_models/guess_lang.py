@@ -11,6 +11,7 @@ import italian_vocab
 import chinese
 
 n = 4   # number of letters as context
+verbose = False
 
 def build_model (word_file, n) :
   """
@@ -99,6 +100,7 @@ def word_prob (word, model, count_escapes=False) :
       if history in model :
         try :
           log_likelihood += model[history][word[pos]]
+          if verbose : print (history, word[pos], model[history][word[pos]])
           done = True
           pos += 1
 
@@ -118,6 +120,7 @@ def word_prob (word, model, count_escapes=False) :
           if low in model[history] :
             # Should penalize this
             log_likelihood += model[history][low]
+            if verbose : print (history, word[pos], low, model[history][low])
             done = True
             pos += 1
 
@@ -137,6 +140,7 @@ def word_prob (word, model, count_escapes=False) :
             #pdb.set_trace ()
             #log_likelihood += -20
             log_likelihood += model[history]["ESC"]
+            if verbose : print (history, word[pos], "ESC", model[history]["ESC"])
 
             if count_escapes :
               k = min (len(model[history]) - 2, 18)     # exclude ESC, sum
@@ -241,11 +245,22 @@ if __name__ == "__main__" :
         del sys.argv[1]
         continue
 
+      if sys.argv[1] == "-v" :
+        verbose = True
+        del sys.argv[1]
+        continue
+
       sys.argv = {}     # flag error
       break
 
   if len(sys.argv) < 2 :
-    print (f"usage: {sys.argv[0]} cmd [-m model] [-n topn] [-d]",
+    print (f"usage: {sys.argv[0]} [-m model] [-n topn] [-d] [-v] cmd [infile] lang [lang [lang [...]]]",
+           file=sys.stderr)
+    print ("cmd is either  build  or  guess.", file=sys.stderr)
+    print ("infile  is either a file name or - for stdin.", file=sys.stderr)
+    print ("   It should be present for  guess  but not for  build.",
+           file=sys.stderr)
+    print ("lang specifies a model language.  The .pkl file must exist",
            file=sys.stderr)
     exit(1)
 
@@ -282,7 +297,7 @@ if __name__ == "__main__" :
 
     count_escapes = (sys.argv[2] == "../checked_words.txt")
 
-    with open (sys.argv[2], "r") as f :
+    with (open (sys.argv[2], "r") if sys.argv[2] != "-" else sys.stdin) as f :
       for word in f :
         word = word.rstrip()
         guesses, scores = guess_lang (word.lower(), models, topn, count_escapes)
@@ -321,7 +336,7 @@ if __name__ == "__main__" :
             if dict_entries :
               guess = guess+lang_list(dict_entries, "?")
 
-        #print (word, guess, score)
+        print (word, guess, score)
 
     if count_escapes :
       with open ("esc_counts.txt", "w") as f, open("esc_frac.txt", "w") as f1 :
